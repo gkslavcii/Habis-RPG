@@ -1,0 +1,24 @@
+# Windows
+Thumbs.db
+.DS_Store
+
+# Unity
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+
+# IDE
+.vs/
+.vscode/
+*.csproj
+*.sln
+*.suo
+
+# Compiled
+*.apk
+*.aab
+*.exe
