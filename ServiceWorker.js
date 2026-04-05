@@ -1,10 +1,10 @@
 const cacheName = "Habis RPG-Habis-RPG-0.1.0";
 const contentToCache = [
     "index.html",
-    "Build/WebGL Build.loader.js",
-    "Build/WebGL Build.framework.js",
-    "Build/WebGL Build.data",
-    "Build/WebGL Build.wasm",
+    "Build/WebBuild.loader.js",
+    "Build/WebBuild.framework.js",
+    "Build/WebBuild.data",
+    "Build/WebBuild.wasm",
     "TemplateData/style.css"
 ];
 

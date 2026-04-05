@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /c/Users/Windows/Desktop/HabisRPG ls-tree -r HEAD --name-only)",
+      "Bash(cp -r Habis-RPG/TemplateData .)",
+      "Bash(cp -r Habis-RPG/Build .)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh api:*)",
+      "Bash(python -c \"import brotli; print\\(''brotli available''\\)\")",
+      "Bash(python -c \"import brotlicffi; print\\(''brotlicffi available''\\)\")",
+      "Bash(pip install:*)",
+      "Bash(python -c \":*)",
+      "Bash(taskkill //F //IM \"Unity.exe\")",
+      "Bash(taskkill //F //IM \"bee_backend.exe\")",
+      "Bash(taskkill //F //IM \"Unity Hub.exe\")",
+      "Bash(taskkill //F //IM \"UnityHub.exe\")",
+      "Bash(find Habis-RPG/Habis-Online/ -delete)",
+      "Bash(find Habis-RPG/Assets -name *.unity -o -name *Scene*)",
+      "Bash(cp -r /c/Users/Windows/Desktop/WebBuild/Build .)",
+      "Bash(cp -r /c/Users/Windows/Desktop/WebBuild/TemplateData .)",
+      "Bash(find \"Habis-RPG/HabisRPG/\" -delete)",
+      "Bash(git rm:*)",
+      "Bash(taskkill //F //IM \"git.exe\")",
+      "Bash(rm -f .git/index.lock)"
+    ]
+  }
+}

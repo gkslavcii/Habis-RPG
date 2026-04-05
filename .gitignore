@@ -2,14 +2,14 @@
 Thumbs.db
 .DS_Store
 
-# Unity project folders
+# Unity project cache (auto-generated)
 Habis-RPG/Library/
 Habis-RPG/Temp/
 Habis-RPG/Obj/
 Habis-RPG/Logs/
 Habis-RPG/UserSettings/
 
-# IDE
+# IDE (auto-generated)
 .vs/
 .vscode/
 *.csproj
@@ -17,7 +17,7 @@ Habis-RPG/UserSettings/
 *.sln
 *.suo
 
-# Compiled
+# Compiled binaries
 *.apk
 *.aab
 *.exe
