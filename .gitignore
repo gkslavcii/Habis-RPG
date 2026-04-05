@@ -2,19 +2,18 @@
 Thumbs.db
 .DS_Store
 
-# Unity
-Library/
-Temp/
-Obj/
-Build/
-Builds/
-Logs/
-UserSettings/
+# Unity project folders
+Habis-RPG/Library/
+Habis-RPG/Temp/
+Habis-RPG/Obj/
+Habis-RPG/Logs/
+Habis-RPG/UserSettings/
 
 # IDE
 .vs/
 .vscode/
 *.csproj
+*.slnx
 *.sln
 *.suo
 
