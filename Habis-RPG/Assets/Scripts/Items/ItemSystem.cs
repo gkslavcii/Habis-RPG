@@ -12,6 +12,7 @@ using HabisRPG.Core;
 namespace HabisRPG.Items
 {
     // ── ITEM EFFECT ──
+
     [Serializable]
     public class ItemEffect
     {
@@ -25,6 +26,7 @@ namespace HabisRPG.Items
     }
 
     // ── ITEM DATA ──
+
     [Serializable]
     public class ItemData
     {

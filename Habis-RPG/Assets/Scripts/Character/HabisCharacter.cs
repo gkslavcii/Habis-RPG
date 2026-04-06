@@ -11,6 +11,7 @@ using HabisRPG.Core;
 
 namespace HabisRPG.Character
 {
+
     [Serializable]
     public class CharacterData
     {
@@ -38,9 +39,9 @@ namespace HabisRPG.Character
         public List<StatusEffect> ActiveEffects = new();
 
         // Equipment & Skills
-        [NonSerialized] public Dictionary<EquipSlot, string> EquippedItems = new();
+        public Dictionary<EquipSlot, string> EquippedItems = new();
         public List<string> UnlockedSkillIds = new();
-        [NonSerialized] public Dictionary<string, int> SkillLevels = new();
+        public Dictionary<string, int> SkillLevels = new();
 
         // Companion specific
         public bool IsCompanion;

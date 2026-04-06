@@ -4,19 +4,36 @@ using HabisRPG.Managers;
 namespace HabisRPG.UI
 {
     /// <summary>
-    /// Auto-initializes the game on scene load.
-    /// No need to attach to any GameObject - runs automatically.
+    /// Game initializer - works both as MonoBehaviour AND static initializer.
+    /// Double safety: RuntimeInitializeOnLoadMethod + MonoBehaviour.Start
     /// </summary>
-    public static class GameBootstrapper
+    public class GameBootstrapper : MonoBehaviour
     {
+        private static bool _initialized = false;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
+        private static void StaticBootstrap()
         {
+            if (_initialized) return;
+            DoBootstrap();
+        }
+
+        private void Start()
+        {
+            if (_initialized) return;
+            DoBootstrap();
+        }
+
+        private static void DoBootstrap()
+        {
+            _initialized = true;
+
             // Create GameManager
             if (GameManager.Instance == null)
             {
                 var gmGO = new GameObject("GameManager");
                 gmGO.AddComponent<GameManager>();
+                Object.DontDestroyOnLoad(gmGO);
             }
 
             // Create UIManager
@@ -25,6 +42,7 @@ namespace HabisRPG.UI
                 var uiGO = new GameObject("UIManager");
                 var ui = uiGO.AddComponent<UIManager>();
                 ui.Initialize();
+                Object.DontDestroyOnLoad(uiGO);
             }
 
             // Create EventSystem for UI input
@@ -33,6 +51,7 @@ namespace HabisRPG.UI
                 var esGO = new GameObject("EventSystem");
                 esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
                 esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+                Object.DontDestroyOnLoad(esGO);
             }
 
             Debug.Log("[Habis RPG] Game bootstrapped successfully!");

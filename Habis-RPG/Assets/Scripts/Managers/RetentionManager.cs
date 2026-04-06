@@ -10,6 +10,7 @@ using HabisRPG.Core;
 
 namespace HabisRPG.Managers
 {
+
     [Serializable]
     public class RetentionData
     {
@@ -20,6 +21,7 @@ namespace HabisRPG.Managers
         public bool DailyBossDefeated;
         public bool DailyChestOpened;
     }
+
 
     [Serializable]
     public class DailyQuest

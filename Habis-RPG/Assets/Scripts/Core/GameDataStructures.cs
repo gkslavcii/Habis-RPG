@@ -10,6 +10,7 @@ using UnityEngine;
 namespace HabisRPG.Core
 {
     // ── CHARACTER STATS ──
+
     [Serializable]
     public class CharacterStats
     {
@@ -95,6 +96,7 @@ namespace HabisRPG.Core
     }
 
     // ── CLASS CONFIGURATION ──
+
     [Serializable]
     public class ClassConfig
     {
@@ -106,6 +108,7 @@ namespace HabisRPG.Core
     }
 
     // ── ENERGY SYSTEM ──
+
     [Serializable]
     public class EnergyState
     {
@@ -152,6 +155,7 @@ namespace HabisRPG.Core
     }
 
     // ── STATUS EFFECT ──
+
     [Serializable]
     public class StatusEffect
     {
@@ -189,6 +193,7 @@ namespace HabisRPG.Core
     }
 
     // ── SKILL DEFINITION ──
+
     [Serializable]
     public class SkillData
     {
@@ -226,6 +231,7 @@ namespace HabisRPG.Core
     }
 
     // ── SKILL TREE NODE ──
+
     [Serializable]
     public class SkillTreeNode
     {

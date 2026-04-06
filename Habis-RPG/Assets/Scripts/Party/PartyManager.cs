@@ -12,7 +12,7 @@ using HabisRPG.Character;
 
 namespace HabisRPG.Party
 {
-    [Serializable]
+
     public class CompanionTemplate
     {
         public string Id;

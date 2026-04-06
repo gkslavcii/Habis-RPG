@@ -10,6 +10,7 @@ using HabisRPG.Core;
 
 namespace HabisRPG.Economy
 {
+
     [Serializable]
     public class WalletData
     {

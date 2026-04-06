@@ -1,33 +1,56 @@
-const cacheName = "Habis RPG-Habis-RPG-0.1.0";
+const cacheName = "Habis-RPG-v0.2.0";
 const contentToCache = [
     "index.html",
     "Build/WebBuild.loader.js",
     "Build/WebBuild.framework.js",
     "Build/WebBuild.data",
     "Build/WebBuild.wasm",
-    "TemplateData/style.css"
+    "TemplateData/style.css",
+    "TemplateData/webmemd-icon.png",
+    "manifest.webmanifest"
 ];
 
 self.addEventListener('install', function (e) {
     console.log('[Service Worker] Install');
-    
-    e.waitUntil((async function () {
-      const cache = await caches.open(cacheName);
-      console.log('[Service Worker] Caching all: app shell and content');
-      await cache.addAll(contentToCache);
-    })());
+    e.waitUntil(
+        caches.open(cacheName).then(function (cache) {
+            console.log('[Service Worker] Caching app shell');
+            return cache.addAll(contentToCache);
+        })
+    );
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', function (e) {
+    console.log('[Service Worker] Activate');
+    e.waitUntil(
+        caches.keys().then(function (keyList) {
+            return Promise.all(keyList.map(function (key) {
+                if (key !== cacheName) {
+                    console.log('[Service Worker] Removing old cache:', key);
+                    return caches.delete(key);
+                }
+            }));
+        })
+    );
+    self.clients.claim();
 });
 
 self.addEventListener('fetch', function (e) {
-    e.respondWith((async function () {
-      let response = await caches.match(e.request);
-      console.log(`[Service Worker] Fetching resource: ${e.request.url}`);
-      if (response) { return response; }
-
-      response = await fetch(e.request);
-      const cache = await caches.open(cacheName);
-      console.log(`[Service Worker] Caching new resource: ${e.request.url}`);
-      cache.put(e.request, response.clone());
-      return response;
-    })());
+    e.respondWith(
+        caches.match(e.request).then(function (response) {
+            if (response) {
+                return response;
+            }
+            return fetch(e.request).then(function (networkResponse) {
+                if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                    var responseToCache = networkResponse.clone();
+                    caches.open(cacheName).then(function (cache) {
+                        cache.put(e.request, responseToCache);
+                    });
+                }
+                return networkResponse;
+            });
+        })
+    );
 });

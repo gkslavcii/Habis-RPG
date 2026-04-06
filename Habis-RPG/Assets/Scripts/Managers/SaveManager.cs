@@ -138,6 +138,7 @@ namespace HabisRPG.Managers
         }
     }
 
+
     [Serializable]
     public class SaveSlotInfo
     {
