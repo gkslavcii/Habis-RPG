@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using HabisRPG.Managers;
 
@@ -40,9 +41,10 @@ namespace HabisRPG.UI
             if (UIManager.Instance == null)
             {
                 var uiGO = new GameObject("UIManager");
-                var ui = uiGO.AddComponent<UIManager>();
-                ui.Initialize();
                 Object.DontDestroyOnLoad(uiGO);
+                var ui = uiGO.AddComponent<UIManager>();
+                // Wait one frame for Awake() to complete, then initialize
+                GameManager.Instance.StartCoroutine(DelayedUIInit(ui));
             }
 
             // Create EventSystem for UI input
@@ -55,6 +57,13 @@ namespace HabisRPG.UI
             }
 
             Debug.Log("[Habis RPG] Game bootstrapped successfully!");
+        }
+
+        private static IEnumerator DelayedUIInit(UIManager ui)
+        {
+            yield return null; // Wait one frame for Awake()
+            ui.Initialize();
+            Debug.Log("[Habis RPG] UI initialized!");
         }
     }
 }
