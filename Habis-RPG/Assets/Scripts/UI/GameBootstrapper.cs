@@ -52,7 +52,11 @@ namespace HabisRPG.UI
             {
                 var esGO = new GameObject("EventSystem");
                 esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
+#if ENABLE_INPUT_SYSTEM
+                esGO.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+#else
                 esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+#endif
                 Object.DontDestroyOnLoad(esGO);
             }
 

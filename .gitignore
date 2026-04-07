@@ -21,3 +21,6 @@ Habis-RPG/UserSettings/
 *.apk
 *.aab
 *.exe
+
+# Temporary build output (moved into Build/)
+Build_new/

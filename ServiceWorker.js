@@ -1,10 +1,10 @@
-const cacheName = "Habis-RPG-v0.2.0";
+const cacheName = "Habis-RPG-v0.2.1";
 const contentToCache = [
     "index.html",
-    "Build/WebBuild.loader.js",
-    "Build/WebBuild.framework.js",
-    "Build/WebBuild.data",
-    "Build/WebBuild.wasm",
+    "Build/Build_new.loader.js",
+    "Build/Build_new.framework.js",
+    "Build/Build_new.data",
+    "Build/Build_new.wasm",
     "TemplateData/style.css",
     "TemplateData/webmemd-icon.png",
     "manifest.webmanifest"
