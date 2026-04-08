@@ -98,6 +98,7 @@ namespace HabisRPG.Items
         {
             if (IsFull) return false;
             Items.Add(item);
+            ItemRegistry.Register(item);
             return true;
         }
 
@@ -106,6 +107,7 @@ namespace HabisRPG.Items
             var item = Items.FirstOrDefault(i => i.Id == itemId);
             if (item == null) return false;
             Items.Remove(item);
+            // Note: don't unregister — character may still have it equipped
             return true;
         }
 

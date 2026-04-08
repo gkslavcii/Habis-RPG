@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using HabisRPG.Core;
+using HabisRPG.Items;
 
 namespace HabisRPG.Character
 {
@@ -205,9 +206,68 @@ namespace HabisRPG.Character
         public CharacterStats GetEffectiveStats()
         {
             var combined = Data.BaseStats.Combined(Data.AllocatedStats);
-            // TODO: Add equipment stat bonuses from ItemDatabase
-            // TODO: Add status effect modifiers
+
+            // Equipment stat bonuses
+            foreach (var kvp in Data.EquippedItems)
+            {
+                var item = ItemRegistry.Get(kvp.Value);
+                if (item == null) continue;
+                combined = combined.Combined(item.GetUpgradedStats());
+
+                // Weapon: bonus STR/INT scaled with damage; armor: DEF
+                if (item.Type == ItemType.Weapon)
+                {
+                    int wd = item.GetUpgradedDamage();
+                    if (item.WeaponSubType == WeaponType.Staff || item.WeaponSubType == WeaponType.SpellOrb)
+                        combined.INT += wd / 4;
+                    else
+                        combined.STR += wd / 4;
+                }
+                else if (item.BaseDefense > 0)
+                {
+                    combined.DEF += item.GetUpgradedDefense();
+                }
+            }
+
+            // Status effect modifiers
+            foreach (var fx in Data.ActiveEffects)
+            {
+                switch (fx.Type)
+                {
+                    case StatusEffectType.Haste:
+                        combined.SPD = Mathf.RoundToInt(combined.SPD * (1f + fx.Magnitude));
+                        break;
+                    case StatusEffectType.Slow:
+                        combined.SPD = Mathf.RoundToInt(combined.SPD * (1f - fx.Magnitude));
+                        break;
+                    case StatusEffectType.CriticalBoost:
+                        combined.CRI += Mathf.RoundToInt(fx.Magnitude * 100f);
+                        break;
+                }
+            }
+
             return combined;
+        }
+
+        /// <summary>
+        /// Equip an item from inventory by Id (assumes it's already in ItemRegistry).
+        /// Returns the previously equipped item Id (if any), so caller can return it to inventory.
+        /// </summary>
+        public string Equip(ItemData item)
+        {
+            if (item == null) return null;
+            string previousId = null;
+            if (Data.EquippedItems.TryGetValue(item.Slot, out var prev))
+                previousId = prev;
+            Data.EquippedItems[item.Slot] = item.Id;
+            RecalculateHP();
+            return previousId;
+        }
+
+        public void Unequip(EquipSlot slot)
+        {
+            Data.EquippedItems.Remove(slot);
+            RecalculateHP();
         }
 
         private void RecalculateHP()

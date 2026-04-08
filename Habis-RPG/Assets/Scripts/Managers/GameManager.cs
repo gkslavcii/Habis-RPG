@@ -11,6 +11,7 @@ using HabisRPG.Combat;
 using HabisRPG.Items;
 using HabisRPG.Party;
 using HabisRPG.Economy;
+using HabisRPG.Skills;
 
 namespace HabisRPG.Managers
 {
@@ -67,6 +68,16 @@ namespace HabisRPG.Managers
 
             // Give starting gear
             GiveStartingEquipment(playerClass);
+
+            // Unlock initial tier-1 skills for the chosen class
+            foreach (var s in SkillDatabase.GetForClass(playerClass))
+            {
+                if (s.UnlockLevel == 1 && (s.PrerequisiteSkillIds?.Length ?? 0) == 0)
+                {
+                    PlayerCharacter.Data.UnlockedSkillIds.Add(s.Id);
+                    PlayerCharacter.Data.SkillLevels[s.Id] = 1;
+                }
+            }
 
             CurrentRegion = Region.CursedForest;
 
@@ -265,6 +276,7 @@ namespace HabisRPG.Managers
 
             PlayerCharacter = new HabisCharacter(save.PlayerData);
             PlayerInventory = new Inventory();
+            ItemRegistry.Clear();
             foreach (var item in save.InventoryItems)
                 PlayerInventory.AddItem(item);
 

@@ -1,10 +1,17 @@
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using HabisRPG.Core;
 using HabisRPG.Managers;
 using HabisRPG.Character;
 using HabisRPG.Combat;
+using HabisRPG.Items;
+using HabisRPG.Skills;
+using HabisRPG.UI.Combat;
+using HabisRPG.UI.Popups;
+using HabisRPG.UI.Screens;
 
 namespace HabisRPG.UI
 {
@@ -44,6 +51,17 @@ namespace HabisRPG.UI
         private Text _turnIndicator;
         private GameObject _combatButtons;
         private Text _energyText;
+
+        // New combat scene + state
+        private CombatSceneView _sceneView;
+        private GameObject _skillSelectPanel;
+        private bool _animating;
+        private int _pendingDamage;
+        private bool _pendingCrit;
+        private bool _pendingMiss;
+        private List<ItemData> _pendingLoot = new();
+        private int _pendingXP;
+        private int _pendingGold;
 
         // Colors
         private static readonly Color DARK_BG = new Color(0.14f, 0.12f, 0.13f);
@@ -231,10 +249,12 @@ namespace HabisRPG.UI
             CreateButton(_gameHudScreen.transform, "Explore & Fight", new Vector2(0, btnY),
                 new Vector2(600, 100), () => StartRandomCombat());
             CreateButton(_gameHudScreen.transform, "Inventory", new Vector2(0, btnY - btnSpacing),
-                new Vector2(600, 100), () => ShowInventory());
-            CreateButton(_gameHudScreen.transform, "Travel", new Vector2(0, btnY - btnSpacing * 2),
+                new Vector2(600, 100), () => OpenInventoryScreen());
+            CreateButton(_gameHudScreen.transform, "Skill Tree", new Vector2(0, btnY - btnSpacing * 2),
+                new Vector2(600, 100), () => OpenSkillTreeScreen());
+            CreateButton(_gameHudScreen.transform, "Travel", new Vector2(0, btnY - btnSpacing * 3),
                 new Vector2(600, 100), () => ShowScreen(_regionScreen));
-            CreateButton(_gameHudScreen.transform, "Save Game", new Vector2(0, btnY - btnSpacing * 3),
+            CreateButton(_gameHudScreen.transform, "Save Game", new Vector2(0, btnY - btnSpacing * 4),
                 new Vector2(600, 100), () => SaveGame());
 
             // Party info
@@ -266,58 +286,113 @@ namespace HabisRPG.UI
         }
 
         // ============================================================
-        // COMBAT SCREEN
+        // COMBAT SCREEN (Sonny-style scene + animated)
         // ============================================================
         private void CreateCombatScreen()
         {
             _combatScreen = CreateScreen("Combat");
+            // Replace solid background — scene view will provide its own.
+            var bgImg = _combatScreen.GetComponent<Image>();
+            if (bgImg != null) bgImg.color = Color.black;
 
-            // Turn indicator
-            _turnIndicator = CreateText(_combatScreen.transform, "Combat!", 36, TextAnchor.MiddleCenter,
-                ACCENT_LIGHT, new Vector2(0, 820), new Vector2(800, 60));
+            // Combat scene (background + units + vfx)
+            _sceneView = CombatSceneView.Create(_combatScreen.transform);
 
-            // Enemy area
-            var enemyPanel = CreatePanel(_combatScreen.transform, new Vector2(0, 550), new Vector2(800, 200));
-            _enemyNameText = CreateText(enemyPanel.transform, "Enemy", 32, TextAnchor.MiddleCenter,
-                HP_RED, new Vector2(0, 50), new Vector2(700, 45));
-            var enemyHpBg = CreateImage(enemyPanel.transform, new Color(0.15f, 0.15f, 0.15f),
-                new Vector2(0, 0), new Vector2(600, 35));
-            _enemyHPBar = CreateImage(enemyHpBg.transform, HP_RED, Vector2.zero, Vector2.zero);
-            SetFillBar(_enemyHPBar, 1f);
-            _enemyHPText = CreateText(enemyPanel.transform, "100/100", 20, TextAnchor.MiddleCenter,
-                TEXT_WHITE, new Vector2(0, 0), new Vector2(600, 35));
+            // Turn indicator (top)
+            _turnIndicator = CreateText(_combatScreen.transform, "", 32, TextAnchor.MiddleCenter,
+                ACCENT_LIGHT, new Vector2(0, 820), new Vector2(900, 50));
 
-            // Player area
-            var playerPanel = CreatePanel(_combatScreen.transform, new Vector2(0, 250), new Vector2(800, 200));
-            _playerHPText = CreateText(playerPanel.transform, "Hero  HP: 100/100", 26, TextAnchor.MiddleCenter,
-                TEXT_WHITE, new Vector2(0, 50), new Vector2(700, 40));
-            var playerHpBg = CreateImage(playerPanel.transform, new Color(0.15f, 0.15f, 0.15f),
-                new Vector2(0, 0), new Vector2(600, 35));
-            _playerHPBar = CreateImage(playerHpBg.transform, HP_GREEN, Vector2.zero, Vector2.zero);
-            SetFillBar(_playerHPBar, 1f);
-            _energyText = CreateText(playerPanel.transform, "Energy: 40/100", 22, TextAnchor.MiddleCenter,
-                ACCENT_LIGHT, new Vector2(0, -45), new Vector2(600, 35));
+            // Energy / HP compact strip (above buttons)
+            _playerHPText = CreateText(_combatScreen.transform, "Hero", 22, TextAnchor.MiddleLeft,
+                TEXT_WHITE, new Vector2(-360, -380), new Vector2(500, 30));
+            _energyText = CreateText(_combatScreen.transform, "Energy: 40/100", 22, TextAnchor.MiddleRight,
+                ACCENT_LIGHT, new Vector2(360, -380), new Vector2(500, 30));
 
-            // Combat log
-            var logPanel = CreatePanel(_combatScreen.transform, new Vector2(0, -50), new Vector2(900, 300));
-            _combatLog = CreateText(logPanel.transform, "Battle begins!", 22, TextAnchor.UpperCenter,
-                TEXT_WHITE, new Vector2(0, 0), new Vector2(850, 280));
+            // Combat log (compact, 3 lines)
+            var logPanel = CreatePanel(_combatScreen.transform, new Vector2(0, -440), new Vector2(960, 100));
+            logPanel.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.08f, 0.8f);
+            _combatLog = CreateText(logPanel.transform, "Battle begins!", 18, TextAnchor.MiddleCenter,
+                TEXT_WHITE, Vector2.zero, new Vector2(940, 90));
 
-            // Action buttons
+            // Action buttons (4 buttons in row)
             _combatButtons = new GameObject("CombatButtons");
             _combatButtons.transform.SetParent(_combatScreen.transform, false);
             var btnRT = _combatButtons.AddComponent<RectTransform>();
-            btnRT.sizeDelta = new Vector2(900, 300);
-            btnRT.anchoredPosition = new Vector2(0, -450);
+            btnRT.sizeDelta = new Vector2(960, 220);
+            btnRT.anchoredPosition = new Vector2(0, -660);
 
-            CreateButton(_combatButtons.transform, "Attack", new Vector2(-200, 60),
-                new Vector2(350, 80), () => CombatAction_Attack());
-            CreateButton(_combatButtons.transform, "Defend", new Vector2(200, 60),
-                new Vector2(350, 80), () => CombatAction_Defend());
-            CreateButton(_combatButtons.transform, "Skill", new Vector2(-200, -40),
-                new Vector2(350, 80), () => CombatAction_Skill());
-            CreateButton(_combatButtons.transform, "Flee", new Vector2(200, -40),
-                new Vector2(350, 80), () => CombatAction_Flee());
+            CreateButton(_combatButtons.transform, "Attack", new Vector2(-330, 50),
+                new Vector2(280, 90), () => StartCoroutine(DoBasicAttack()));
+            CreateButton(_combatButtons.transform, "Skill", new Vector2(-30, 50),
+                new Vector2(280, 90), () => OpenSkillSelect());
+            CreateButton(_combatButtons.transform, "Defend", new Vector2(270, 50),
+                new Vector2(280, 90), () => StartCoroutine(DoDefend()));
+            CreateButton(_combatButtons.transform, "Flee", new Vector2(0, -60),
+                new Vector2(280, 90), () => StartCoroutine(DoFlee()));
+
+            // Skill select panel (hidden by default)
+            BuildSkillSelectPanel();
+
+            // Hidden vars (no longer used directly, kept null-safe)
+            _enemyNameText = null;
+            _enemyHPBar = null;
+            _enemyHPText = null;
+            _playerHPBar = null;
+        }
+
+        private void BuildSkillSelectPanel()
+        {
+            _skillSelectPanel = new GameObject("SkillSelectPanel");
+            _skillSelectPanel.transform.SetParent(_combatScreen.transform, false);
+            var rt = _skillSelectPanel.AddComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(900, 540);
+            rt.anchoredPosition = new Vector2(0, -200);
+            var img = _skillSelectPanel.AddComponent<Image>();
+            img.color = new Color(0.08f, 0.06f, 0.12f, 0.96f);
+            _skillSelectPanel.SetActive(false);
+
+            CreateText(_skillSelectPanel.transform, "Choose a Skill", 30, TextAnchor.MiddleCenter,
+                ACCENT_LIGHT, new Vector2(0, 230), new Vector2(800, 50));
+
+            CreateButton(_skillSelectPanel.transform, "Cancel",
+                new Vector2(0, -230), new Vector2(280, 70), () => _skillSelectPanel.SetActive(false));
+        }
+
+        private void OpenSkillSelect()
+        {
+            if (_animating) return;
+            // Clear old skill buttons
+            var pc = GameManager.Instance.PlayerCharacter;
+            for (int i = _skillSelectPanel.transform.childCount - 1; i >= 0; i--)
+            {
+                var c = _skillSelectPanel.transform.GetChild(i);
+                if (c.name.StartsWith("SkillBtn_")) Destroy(c.gameObject);
+            }
+
+            float y = 160;
+            int count = 0;
+            foreach (var id in pc.Data.UnlockedSkillIds)
+            {
+                var skill = SkillDatabase.Get(id);
+                if (skill == null) continue;
+                var go = CreateButton(_skillSelectPanel.transform,
+                    $"{skill.Name}  ({skill.EnergyCost} EN)",
+                    new Vector2(0, y - count * 80), new Vector2(720, 70),
+                    () => StartCoroutine(DoSkill(skill)));
+                go.name = $"SkillBtn_{id}";
+                count++;
+                if (count >= 5) break;
+            }
+
+            if (count == 0)
+            {
+                var lbl = CreateText(_skillSelectPanel.transform, "No skills available",
+                    22, TextAnchor.MiddleCenter, TEXT_DIM,
+                    new Vector2(0, 0), new Vector2(700, 40));
+                lbl.gameObject.name = "SkillBtn_empty";
+            }
+
+            _skillSelectPanel.SetActive(true);
         }
 
         private List<HabisCharacter> _currentEnemies = new();
@@ -338,14 +413,21 @@ namespace HabisRPG.UI
             gm.Combat.OnUnitDefeated += OnUnitDefeated;
             gm.Combat.OnCombatEnd += OnCombatEnd;
 
-            _combatLog.text = "Battle begins!\n";
+            // Setup the visual scene
+            _sceneView.SetRegion(gm.CurrentRegion);
+            _sceneView.Populate(gm.Party.GetCombatParty(), _currentEnemies);
+
+            _combatLog.text = "Battle begins!";
+            _pendingLoot.Clear();
+            _pendingXP = 0;
+            _pendingGold = 0;
             ShowScreen(_combatScreen);
             UpdateCombatUI();
 
             // Start first turn
             gm.Combat.AdvanceToNextUnit();
             UpdateCombatUI();
-            ProcessAITurns();
+            StartCoroutine(ProcessAITurnsCoroutine());
         }
 
         private void UpdateCombatUI()
@@ -355,21 +437,9 @@ namespace HabisRPG.UI
 
             var pc = gm.PlayerCharacter;
             _playerHPText.text = $"{pc.Data.Name}  HP: {pc.Data.CurrentHP}/{pc.Data.MaxHP}";
-            float hpRatio = (float)pc.Data.CurrentHP / pc.Data.MaxHP;
-            SetFillBar(_playerHPBar, hpRatio);
-            _playerHPBar.color = hpRatio > 0.5f ? HP_GREEN : (hpRatio > 0.25f ? GOLD_COLOR : HP_RED);
             _energyText.text = $"Energy: {pc.Data.Energy.Current}/{pc.Data.Energy.Max}";
 
-            // Show first living enemy
-            var enemies = gm.Combat.GetEnemyUnits();
-            if (enemies.Count > 0)
-            {
-                var enemy = enemies[0];
-                _enemyNameText.text = $"{enemy.Character.Data.Name} (x{enemies.Count})";
-                _enemyHPText.text = $"{enemy.Character.Data.CurrentHP}/{enemy.Character.Data.MaxHP}";
-                float eRatio = (float)enemy.Character.Data.CurrentHP / enemy.Character.Data.MaxHP;
-                SetFillBar(_enemyHPBar, eRatio);
-            }
+            if (_sceneView != null) _sceneView.RefreshAllHP();
 
             // Turn indicator
             var current = gm.Combat.CurrentUnit;
@@ -379,23 +449,24 @@ namespace HabisRPG.UI
                     ? $">> {current.Character.Data.Name}'s Turn <<"
                     : $"Enemy: {current.Character.Data.Name}";
                 _combatButtons.SetActive(current.IsPlayerSide &&
-                    current.Character == gm.PlayerCharacter);
+                    current.Character == gm.PlayerCharacter && !_animating);
             }
         }
 
-        private void ProcessAITurns()
+        private IEnumerator ProcessAITurnsCoroutine()
         {
             var gm = GameManager.Instance;
-            if (gm.Combat.Result != CombatResult.InProgress) return;
+            if (gm.Combat.Result != CombatResult.InProgress) yield break;
 
             var current = gm.Combat.CurrentUnit;
-            if (current == null) return;
 
-            // AI for enemies and companion
+            // Loop while it's not the player's turn
             while (current != null && (
                 !current.IsPlayerSide ||
                 (current.IsPlayerSide && current.Character != gm.PlayerCharacter)))
             {
+                if (gm.Combat.Result != CombatResult.InProgress) yield break;
+
                 if (!current.CanAct)
                 {
                     AddCombatLog($"{current.Character.Data.Name} is stunned!");
@@ -403,153 +474,269 @@ namespace HabisRPG.UI
                 }
                 else if (!current.IsPlayerSide)
                 {
-                    // Enemy AI: basic attack on random player
+                    // Enemy AI
                     var players = gm.Combat.GetPlayerUnits();
                     if (players.Count > 0)
                     {
                         var target = players[Random.Range(0, players.Count)];
+                        var attackerView = _sceneView.FindView(current.Character);
+                        var targetView = _sceneView.FindView(target.Character);
+                        yield return _sceneView.PlayBasicAttack(attackerView, targetView);
                         gm.Combat.ExecuteBasicAttack(target);
                     }
                 }
                 else
                 {
-                    // Companion AI
+                    // Companion AI: basic attack
                     var enemies = gm.Combat.GetEnemyUnits();
                     if (enemies.Count > 0)
                     {
+                        var attackerView = _sceneView.FindView(current.Character);
+                        var targetView = _sceneView.FindView(enemies[0].Character);
+                        yield return _sceneView.PlayBasicAttack(attackerView, targetView);
                         gm.Combat.ExecuteBasicAttack(enemies[0]);
                     }
                 }
 
                 UpdateCombatUI();
-                if (gm.Combat.Result != CombatResult.InProgress) return;
+                if (gm.Combat.Result != CombatResult.InProgress) yield break;
 
                 current = gm.Combat.AdvanceToNextUnit();
                 UpdateCombatUI();
+                yield return new WaitForSeconds(0.15f);
             }
         }
 
-        private void CombatAction_Attack()
+        private IEnumerator DoBasicAttack()
         {
+            if (_animating) yield break;
+            _animating = true;
+            _combatButtons.SetActive(false);
+
             var gm = GameManager.Instance;
             var enemies = gm.Combat.GetEnemyUnits();
-            if (enemies.Count == 0) return;
+            if (enemies.Count == 0) { _animating = false; yield break; }
 
+            var attackerView = _sceneView.FindView(gm.PlayerCharacter);
+            var targetView = _sceneView.FindView(enemies[0].Character);
+            yield return _sceneView.PlayBasicAttack(attackerView, targetView);
             gm.Combat.ExecuteBasicAttack(enemies[0]);
             UpdateCombatUI();
 
-            if (gm.Combat.Result != CombatResult.InProgress) return;
-
-            gm.Combat.AdvanceToNextUnit();
-            UpdateCombatUI();
-            ProcessAITurns();
+            yield return AfterPlayerAction();
         }
 
-        private void CombatAction_Defend()
+        private IEnumerator DoDefend()
         {
+            if (_animating) yield break;
+            _animating = true;
+            _combatButtons.SetActive(false);
+
             var gm = GameManager.Instance;
+            var pcView = _sceneView.FindView(gm.PlayerCharacter);
+            // Pulse + barrier glow
+            VFXRunner.Instance.StartCoroutine(VFXPlayer.Burst(pcView.VFXAnchor,
+                new Color(0.55f, 0.85f, 1f, 0.9f), 200f));
+            yield return UITween.PunchScale(pcView.transform, 0.1f, 0.3f);
+
             gm.Combat.ExecuteDefend();
-            AddCombatLog($"{gm.PlayerCharacter.Data.Name} defends! (+Energy, +Barrier)");
+            AddCombatLog($"{gm.PlayerCharacter.Data.Name} defends!");
             UpdateCombatUI();
 
-            if (gm.Combat.Result != CombatResult.InProgress) return;
-
-            gm.Combat.AdvanceToNextUnit();
-            UpdateCombatUI();
-            ProcessAITurns();
+            yield return AfterPlayerAction();
         }
 
-        private void CombatAction_Skill()
+        private IEnumerator DoSkill(SkillData skill)
         {
-            // For now, treat as strong attack if enough energy
+            if (_animating) yield break;
+            _skillSelectPanel.SetActive(false);
+            _animating = true;
+            _combatButtons.SetActive(false);
+
             var gm = GameManager.Instance;
             var pc = gm.PlayerCharacter;
-
-            if (pc.Data.Energy.Current >= 20)
+            if (pc.Data.Energy.Current < skill.EnergyCost)
             {
-                pc.Data.Energy.TrySpend(20);
-                var enemies = gm.Combat.GetEnemyUnits();
-                if (enemies.Count > 0)
-                {
-                    // Deal 1.5x damage as a skill
-                    var stats = pc.GetEffectiveStats();
-                    int dmg = Mathf.RoundToInt((10 + stats.STR / 2) * 1.5f);
-                    enemies[0].Character.TakeDamage(dmg);
-                    AddCombatLog($"{pc.Data.Name} uses Power Strike! {dmg} damage!");
+                AddCombatLog("Not enough energy!");
+                _animating = false;
+                _combatButtons.SetActive(true);
+                yield break;
+            }
 
-                    if (!enemies[0].Character.IsAlive)
-                        AddCombatLog($"{enemies[0].Character.Data.Name} defeated!");
-                }
+            var attackerView = _sceneView.FindView(pc);
+            var enemies = gm.Combat.GetEnemyUnits();
+            UnitView targetView = enemies.Count > 0 ? _sceneView.FindView(enemies[0].Character) : null;
 
-                gm.Combat.CurrentUnit.HasActed = true;
-                UpdateCombatUI();
+            Color tint = GetSkillTint(skill);
+            bool isProjectile = skill.DamageType == DamageType.Magical && !skill.IsAoE;
+            yield return _sceneView.PlaySkill(attackerView, targetView, tint, isProjectile, skill.IsAoE);
 
-                if (gm.Combat.Result != CombatResult.InProgress) return;
-                gm.Combat.AdvanceToNextUnit();
-                UpdateCombatUI();
-                ProcessAITurns();
+            // Apply skill via engine
+            if (targetView != null)
+            {
+                var targetUnit = gm.Combat.GetEnemyUnits().FirstOrDefault();
+                if (targetUnit != null)
+                    gm.Combat.ExecuteSkill(skill, targetUnit);
             }
             else
             {
-                AddCombatLog("Not enough energy! (Need 20)");
+                // Self-buff
+                pc.Data.Energy.TrySpend(skill.EnergyCost);
+                if (skill.HasEffect)
+                {
+                    pc.Data.ActiveEffects.Add(StatusEffect.Create(
+                        skill.AppliesEffect, skill.EffectDuration, 0.3f));
+                }
+                gm.Combat.CurrentUnit.HasActed = true;
             }
+
+            AddCombatLog($"{pc.Data.Name} uses {skill.Name}!");
+            UpdateCombatUI();
+
+            yield return AfterPlayerAction();
         }
 
-        private void CombatAction_Flee()
+        private IEnumerator DoFlee()
         {
+            if (_animating) yield break;
+            _animating = true;
+            _combatButtons.SetActive(false);
+
             var gm = GameManager.Instance;
             bool fled = gm.Combat.ExecuteFlee();
             if (fled)
             {
                 AddCombatLog("Fled from battle!");
+                yield return new WaitForSeconds(0.3f);
                 EndCombatCleanup();
                 ShowScreen(_gameHudScreen);
                 UpdateHUD();
+                _animating = false;
+                yield break;
             }
             else
             {
                 AddCombatLog("Failed to flee!");
                 gm.Combat.AdvanceToNextUnit();
                 UpdateCombatUI();
-                ProcessAITurns();
+                yield return ProcessAITurnsCoroutine();
+                _animating = false;
+                _combatButtons.SetActive(true);
             }
+        }
+
+        private IEnumerator AfterPlayerAction()
+        {
+            var gm = GameManager.Instance;
+            yield return new WaitForSeconds(0.15f);
+            if (gm.Combat.Result != CombatResult.InProgress)
+            {
+                _animating = false;
+                yield break;
+            }
+            gm.Combat.AdvanceToNextUnit();
+            UpdateCombatUI();
+            yield return ProcessAITurnsCoroutine();
+            _animating = false;
+            UpdateCombatUI();
+        }
+
+        private static Color GetSkillTint(SkillData skill)
+        {
+            if (skill.Element == ElementType.Fire) return new Color(1f, 0.45f, 0.15f);
+            if (skill.Element == ElementType.Ice) return new Color(0.55f, 0.85f, 1f);
+            if (skill.Element == ElementType.Lightning) return new Color(0.9f, 0.85f, 1f);
+            if (skill.Element == ElementType.Poison) return new Color(0.45f, 0.95f, 0.3f);
+            if (skill.Element == ElementType.Void) return new Color(0.65f, 0.3f, 0.95f);
+            if (skill.DamageType == DamageType.Magical) return new Color(0.5f, 0.5f, 1f);
+            return new Color(1f, 0.85f, 0.5f);
         }
 
         private void OnDamageDealt(object sender, DamageEventArgs e)
         {
             AddCombatLog(e.Message);
+            // Spawn damage popup over the target
+            if (_sceneView != null && e.Target != null)
+            {
+                var view = _sceneView.FindView(e.Target);
+                if (view != null)
+                {
+                    VFXPlayer.SpawnDamagePopup(view.VFXAnchor,
+                        e.Damage, e.IsCritical, false, e.IsMiss);
+                }
+            }
         }
 
         private void OnUnitDefeated(object sender, CombatEventArgs e)
         {
             AddCombatLog(e.Message);
+            if (_sceneView != null && e.Target != null)
+            {
+                var view = _sceneView.FindView(e.Target);
+                if (view != null)
+                    StartCoroutine(_sceneView.PlayDeath(view));
+            }
         }
 
         private void OnCombatEnd(object sender, CombatEventArgs e)
         {
             var gm = GameManager.Instance;
-            string resultText = gm.Combat.Result == CombatResult.Victory
-                ? "VICTORY! Tap to continue..."
-                : "DEFEAT... Tap to continue...";
-
-            AddCombatLog($"\n{resultText}");
             _combatButtons.SetActive(false);
 
-            // Create a "continue" button
-            GameObject continueBtn = null;
-            continueBtn = CreateButton(_combatScreen.transform, "Continue",
-                new Vector2(0, -700), new Vector2(400, 80), () =>
+            if (gm.Combat.Result == CombatResult.Victory)
+            {
+                // Compute rewards (mirror GameManager logic so popup matches)
+                _pendingXP = 0;
+                _pendingGold = 0;
+                _pendingLoot.Clear();
+                foreach (var unit in gm.Combat.AllUnits)
                 {
-                    EndCombatCleanup();
-                    if (gm.Combat.Result == CombatResult.Defeat)
-                    {
-                        // Heal player on defeat
-                        gm.PlayerCharacter.Heal(gm.PlayerCharacter.Data.MaxHP);
-                    }
-                    ShowScreen(_gameHudScreen);
-                    UpdateHUD();
-                    Destroy(continueBtn);
-                });
+                    if (unit.IsPlayerSide) continue;
+                    int level = unit.Character.Data.Level;
+                    _pendingXP += 10 + level * 3;
+                    _pendingGold += gm.Economy.CalculateGoldDrop(level, EnemyTier.Basic);
+                    if (Random.value < 0.7f)
+                        _pendingLoot.Add(LootGenerator.GenerateDrop(EnemyTier.Basic, level));
+                }
+                StartCoroutine(VictoryFlow());
+            }
+            else
+            {
+                StartCoroutine(DefeatFlow());
+            }
+        }
+
+        private IEnumerator VictoryFlow()
+        {
+            var gm = GameManager.Instance;
+            AddCombatLog("VICTORY!");
+            yield return VFXPlayer.ScreenFlash(_canvas.transform,
+                new Color(1f, 0.9f, 0.4f, 0.4f), 0.4f);
+            yield return new WaitForSeconds(0.4f);
+
+            // Show loot popup (registers items into inventory automatically via AddItem)
+            foreach (var item in _pendingLoot) gm.PlayerInventory.AddItem(item);
+            yield return LootPopup.Show(_canvas.transform, _pendingLoot, _pendingGold, _pendingXP);
+
+            EndCombatCleanup();
+            ShowScreen(_gameHudScreen);
+            UpdateHUD();
+            _animating = false;
+        }
+
+        private IEnumerator DefeatFlow()
+        {
+            var gm = GameManager.Instance;
+            AddCombatLog("DEFEAT...");
+            yield return VFXPlayer.ScreenFlash(_canvas.transform,
+                new Color(0.6f, 0.1f, 0.1f, 0.6f), 0.6f);
+            yield return new WaitForSeconds(0.6f);
+
+            gm.PlayerCharacter.Heal(gm.PlayerCharacter.Data.MaxHP);
+            EndCombatCleanup();
+            ShowScreen(_gameHudScreen);
+            UpdateHUD();
+            _animating = false;
         }
 
         private void EndCombatCleanup()
@@ -585,45 +772,38 @@ namespace HabisRPG.UI
                 new Vector2(400, 80), () => { ShowScreen(_gameHudScreen); UpdateHUD(); });
         }
 
-        private void ShowInventory()
+        private InventoryScreen _inventoryScreenInstance;
+        private SkillTreeScreen _skillTreeScreenInstance;
+
+        private void OpenInventoryScreen()
         {
-            ShowScreen(_inventoryScreen);
-
-            // Clear old items
-            foreach (Transform child in _inventoryScreen.transform)
+            // Destroy any existing instance to refresh contents
+            if (_inventoryScreenInstance != null) Destroy(_inventoryScreenInstance.gameObject);
+            _inventoryScreenInstance = InventoryScreen.Create(_canvas.transform, () =>
             {
-                if (child.name.StartsWith("Item_"))
-                    Destroy(child.gameObject);
-            }
-
-            var inv = GameManager.Instance.PlayerInventory;
-            if (inv == null || inv.Items.Count == 0)
-            {
-                CreateText(_inventoryScreen.transform, "No items yet. Go fight!",
-                    26, TextAnchor.MiddleCenter, TEXT_DIM, new Vector2(0, 200), new Vector2(600, 40))
-                    .gameObject.name = "Item_empty";
-                return;
-            }
-
-            float yPos = 700;
-            foreach (var item in inv.Items)
-            {
-                if (yPos < -700) break;
-
-                Color rarityColor = item.Rarity switch
+                if (_inventoryScreenInstance != null)
                 {
-                    ItemRarity.Common => TEXT_DIM,
-                    ItemRarity.Rare => new Color(0.3f, 0.5f, 1f),
-                    ItemRarity.Epic => new Color(0.7f, 0.3f, 0.9f),
-                    ItemRarity.Legendary => GOLD_COLOR,
-                    _ => TEXT_WHITE
-                };
+                    Destroy(_inventoryScreenInstance.gameObject);
+                    _inventoryScreenInstance = null;
+                }
+                ShowScreen(_gameHudScreen);
+                UpdateHUD();
+            });
+        }
 
-                var txt = CreateText(_inventoryScreen.transform, $"{item.Name}  Lv.{item.Level}  [{item.Rarity}]",
-                    24, TextAnchor.MiddleLeft, rarityColor, new Vector2(0, yPos), new Vector2(800, 40));
-                txt.gameObject.name = $"Item_{item.Id}";
-                yPos -= 50;
-            }
+        private void OpenSkillTreeScreen()
+        {
+            if (_skillTreeScreenInstance != null) Destroy(_skillTreeScreenInstance.gameObject);
+            _skillTreeScreenInstance = SkillTreeScreen.Create(_canvas.transform, () =>
+            {
+                if (_skillTreeScreenInstance != null)
+                {
+                    Destroy(_skillTreeScreenInstance.gameObject);
+                    _skillTreeScreenInstance = null;
+                }
+                ShowScreen(_gameHudScreen);
+                UpdateHUD();
+            });
         }
 
         // ============================================================
@@ -664,13 +844,19 @@ namespace HabisRPG.UI
             bool success = GameManager.Instance.TravelToRegion(region);
             if (success)
             {
-                ShowScreen(_gameHudScreen);
-                UpdateHUD();
+                StartCoroutine(TravelTransition(region));
             }
             else
             {
                 Debug.Log($"[Habis RPG] Level too low for {region}");
             }
+        }
+
+        private IEnumerator TravelTransition(Region region)
+        {
+            yield return RegionTransition.Play(_canvas.transform, region);
+            ShowScreen(_gameHudScreen);
+            UpdateHUD();
         }
 
         private void SaveGame()
